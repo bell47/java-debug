@@ -44,6 +44,7 @@ public class MethodBreakpoint implements IMethodBreakpoint, IEvaluatableBreakpoi
     private String condition;
     private int hitCount;
     private boolean async = false;
+    private final boolean suspendAllThreads;
 
     private HashMap<Object, Object> propertyMap = new HashMap<>();
     private Object compiledConditionalExpression = null;
@@ -53,7 +54,7 @@ public class MethodBreakpoint implements IMethodBreakpoint, IEvaluatableBreakpoi
     private List<Disposable> subscriptions = new ArrayList<>();
 
     public MethodBreakpoint(VirtualMachine vm, IEventHub eventHub, String className, String functionName,
-            String condition, int hitCount) {
+            String condition, int hitCount, boolean suspendAllThreads) {
         Objects.requireNonNull(vm);
         Objects.requireNonNull(eventHub);
         Objects.requireNonNull(className);
@@ -64,6 +65,7 @@ public class MethodBreakpoint implements IMethodBreakpoint, IEvaluatableBreakpoi
         this.functionName = functionName;
         this.condition = condition;
         this.hitCount = hitCount;
+        this.suspendAllThreads = suspendAllThreads;
     }
 
     @Override
@@ -262,7 +264,7 @@ public class MethodBreakpoint implements IMethodBreakpoint, IEvaluatableBreakpoi
             MethodEntryRequest request = vm.eventRequestManager().createMethodEntryRequest();
 
             request.addClassFilter(type);
-            request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+            request.setSuspendPolicy(suspendAllThreads ? EventRequest.SUSPEND_ALL : EventRequest.SUSPEND_EVENT_THREAD);
             if (hitCount > 0) {
                 request.addCountFilter(hitCount);
             }

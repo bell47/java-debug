@@ -394,6 +394,7 @@ public class DebugUtility {
                 request.addClassExclusionFilter(exclusionFilter);
             }
         }
+        // Note: suspend policy will be set by the caller (StepRequestHandler) based on session settings
         request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
         request.addCountFilter(1);
 
@@ -415,7 +416,7 @@ public class DebugUtility {
         EventRequestManager manager = debugSession.getVM().eventRequestManager();
         MethodEntryRequest request = manager.createMethodEntryRequest();
         request.addClassFilter(mainClass);
-        request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+        request.setSuspendPolicy(debugSession.shouldSuspendAllThreads() ? EventRequest.SUSPEND_ALL : EventRequest.SUSPEND_EVENT_THREAD);
 
         debugSession.getEventHub().events().filter(debugEvent -> {
             return debugEvent.event instanceof MethodEntryEvent && request.equals(debugEvent.event.request());

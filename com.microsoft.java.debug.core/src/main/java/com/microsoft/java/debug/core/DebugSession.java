@@ -36,9 +36,12 @@ public class DebugSession implements IDebugSession {
     private EventHub eventHub = new EventHub();
     private List<EventRequest> eventRequests = new ArrayList<>();
     private List<Disposable> subscriptions = new ArrayList<>();
+    private final boolean suspendAllThreads;
 
     public DebugSession(VirtualMachine virtualMachine) {
         vm = virtualMachine;
+        // Capture suspend policy at session start - this persists for the session lifetime
+        this.suspendAllThreads = DebugSettings.getCurrent().suspendAllThreads;
     }
 
     @Override
@@ -128,17 +131,17 @@ public class DebugSession implements IDebugSession {
 
     @Override
     public IBreakpoint createBreakpoint(JavaBreakpointLocation sourceLocation, int hitCount, String condition, String logMessage) {
-        return new EvaluatableBreakpoint(vm, this.getEventHub(), sourceLocation, hitCount, condition, logMessage);
+        return new EvaluatableBreakpoint(vm, this.getEventHub(), sourceLocation, hitCount, condition, logMessage, suspendAllThreads);
     }
 
     @Override
     public IBreakpoint createBreakpoint(String className, int lineNumber, int hitCount, String condition, String logMessage) {
-        return new EvaluatableBreakpoint(vm, this.getEventHub(), className, lineNumber, hitCount, condition, logMessage);
+        return new EvaluatableBreakpoint(vm, this.getEventHub(), className, lineNumber, hitCount, condition, logMessage, suspendAllThreads);
     }
 
     @Override
     public IWatchpoint createWatchPoint(String className, String fieldName, String accessType, String condition, int hitCount) {
-        return new Watchpoint(vm, this.getEventHub(), className, fieldName, accessType, condition, hitCount);
+        return new Watchpoint(vm, this.getEventHub(), className, fieldName, accessType, condition, hitCount, suspendAllThreads);
     }
 
     @Override
@@ -185,7 +188,7 @@ public class DebugSession implements IDebugSession {
 
             if (exceptionTypes == null || exceptionTypes.length == 0) {
                 ExceptionRequest request = manager.createExceptionRequest(null, notifyCaught, notifyUncaught);
-                request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+                request.setSuspendPolicy(suspendAllThreads ? EventRequest.SUSPEND_ALL : EventRequest.SUSPEND_EVENT_THREAD);
                 if (classFilters != null) {
                     for (String classFilter : classFilters) {
                         request.addClassFilter(classFilter);
@@ -261,16 +264,21 @@ public class DebugSession implements IDebugSession {
     }
 
     @Override
+    public boolean shouldSuspendAllThreads() {
+        return suspendAllThreads;
+    }
+
+    @Override
     public IMethodBreakpoint createFunctionBreakpoint(String className, String functionName, String condition,
             int hitCount) {
-        return new MethodBreakpoint(vm, this.getEventHub(), className, functionName, condition, hitCount);
+        return new MethodBreakpoint(vm, this.getEventHub(), className, functionName, condition, hitCount, suspendAllThreads);
     }
 
     private void createExceptionBreakpoint(ReferenceType refType, boolean notifyCaught, boolean notifyUncaught,
             String[] classFilters, String[] classExclusionFilters) {
         EventRequestManager manager = vm.eventRequestManager();
         ExceptionRequest request = manager.createExceptionRequest(refType, notifyCaught, notifyUncaught);
-        request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD);
+        request.setSuspendPolicy(suspendAllThreads ? EventRequest.SUSPEND_ALL : EventRequest.SUSPEND_EVENT_THREAD);
         if (classFilters != null) {
             for (String classFilter : classFilters) {
                 request.addClassFilter(classFilter);

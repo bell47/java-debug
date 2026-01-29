@@ -149,6 +149,11 @@ public class ThreadsRequestHandler implements IDebugRequestHandler {
         if (thread == null) {
             thread = DebugUtility.getThread(context.getDebugSession(), arguments.threadId);
         }
+
+        if (context.getDebugSession().shouldSuspendAllThreads()) {
+            thread = null;
+        }
+
         /**
          * See the jdi doc https://docs.oracle.com/javase/7/docs/jdk/api/jpda/jdi/com/sun/jdi/ThreadReference.html#resume(),
          * suspends of both the virtual machine and individual threads are counted. Before a thread will run again, it must
