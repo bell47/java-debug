@@ -65,6 +65,8 @@ import com.sun.jdi.StackFrame;
 import com.sun.jdi.StringReference;
 import com.sun.jdi.Type;
 import com.sun.jdi.Value;
+import com.sun.jdi.PrimitiveType;
+import com.sun.jdi.ClassNotLoadedException;
 
 public class VariablesRequestHandler implements IDebugRequestHandler {
     protected static final Logger logger = Logger.getLogger(Configuration.LOGGER_NAME);
@@ -82,7 +84,7 @@ public class VariablesRequestHandler implements IDebugRequestHandler {
      * single-threaded JDWP request processing strategy,
      * a single JDWP latency is about 10ms.
      */
-    static final long USABLE_JDWP_LATENCY = 10/**ms*/;
+    static final long USABLE_JDWP_LATENCY = 10/*ms*/;
 
     @Override
     public List<Command> getTargetCommands() {
@@ -370,10 +372,12 @@ public class VariablesRequestHandler implements IDebugRequestHandler {
                 referenceId = context.getRecyclableIdPool().addObject(containerNode.getThreadId(), varProxy);
             }
 
+            String[] rawAttributes = extractAttributes(javaVariable);
+
             Types.Variable typedVariables = new Types.Variable(name, valueString, typeString, referenceId, evaluateName);
             typedVariables.indexedVariables = Math.max(indexedVariables, 0);
-            if (varProxy != null && varProxy.isLazyVariable()) {
-                typedVariables.presentationHint = new VariablePresentationHint(true);
+            if ((varProxy != null && varProxy.isLazyVariable()) || (rawAttributes.length > 0)) {
+                typedVariables.presentationHint = new VariablePresentationHint(varProxy != null && varProxy.isLazyVariable(), rawAttributes);
             }
 
             if (detailsValue != null) {
@@ -389,6 +393,36 @@ public class VariablesRequestHandler implements IDebugRequestHandler {
         response.body = new Responses.VariablesResponseBody(list);
 
         return CompletableFuture.completedFuture(response);
+    }
+
+    private String[] extractAttributes(Variable variable) {
+        final List<String> attributes = new ArrayList<>();
+        if (variable.field != null) {
+            if (variable.field.isStatic()) {
+                attributes.add("static");
+            }
+            if (variable.field.isFinal()) {
+                // static final Primitive or StringRef fields are compile-time constants in Java
+                boolean isPrimitive;
+                try {
+                    isPrimitive = variable.field.type() instanceof PrimitiveType;
+                } catch (ClassNotLoadedException e) { /* type() not yet loaded indicates some ReferenceType */
+                    isPrimitive = false;
+                }
+                boolean canBeTrueConstant = (isPrimitive || variable.field instanceof StringReference);
+                if (variable.field.isStatic() && canBeTrueConstant) {
+                    attributes.add("constant");
+                }
+                attributes.add("readOnly");
+            }
+        }
+        // local 'final' variables get inlined by the compiler and do not appear
+
+        if (variable.value instanceof StringReference) {
+            attributes.add("rawString");
+        }
+
+        return attributes.toArray(new String[0]);
     }
 
     private boolean supportsLogicStructureView(IDebugAdapterContext context) {
